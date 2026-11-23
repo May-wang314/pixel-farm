@@ -5730,7 +5730,7 @@ function drawConfirm(m) {
   }
 }
 function drawMenu() {
-  const h = 210, y = 40;
+  const h = 238, y = 26;
   panelFrame('菜单', h, y);
   const x0 = PX + 20, bw = PW - 40;
   const st = S.settings;
@@ -5739,7 +5739,10 @@ function drawMenu() {
   button('m_speed', x0, y + 72, bw, 22, '时间流速：' + (timeScale === 1 ? '正常' : timeScale === 2 ? '2倍' : '0.5倍'), 'blue', () => { timeScale = timeScale === 1 ? 2 : timeScale === 2 ? 0.5 : 1; S.timeScale = timeScale; sfx('click'); });
   button('m_help', x0, y + 98, bw, 22, '游戏说明', 'yellow', () => UI.open({ type: 'help' }));
   button('m_save', x0, y + 124, bw, 22, '保存游戏', 'cream', () => { UI.toast(saveGame() ? '已保存' : '保存失败（浏览器不允许存储）'); sfx('coin'); });
-  button('m_reset', x0, y + 150, bw, 22, '重新开始', 'red', () => UI.confirm('重新开始', '所有进度都会被清除，\n确定要重新开始吗？', () => { resetGame(); }, '重新开始', 'red'));
+  const hb = (bw - 6) / 2;
+  button('m_exp', x0, y + 150, hb, 22, '导出存档', 'blue', () => saveTransfer('export'), { size: 7 });
+  button('m_imp', x0 + hb + 6, y + 150, hb, 22, '导入存档', 'blue', () => saveTransfer('import'), { size: 7 });
+  button('m_reset', x0, y + 176, bw, 22, '重新开始', 'red', () => UI.confirm('重新开始', '所有进度都会被清除，\n确定要重新开始吗？', () => { resetGame(); }, '重新开始', 'red'));
   drawText(`已游玩 ${S.day} 天 · 收获 ${S.stats.harvest} · 订单 ${S.stats.orders}`, W / 2, y + h - 18, { size: 6, color: '#8a5a3b', align: 0.5 });
 }
 const HELP_TEXT = [
@@ -6250,13 +6253,61 @@ function drawTitle(dt) {
     const x = 48, w = W - 96, h = 26, pr = hit(id, x, y, w, h, () => { sfx('select'); fn(); });
     drawBtn(x, y, w, h, col, pr); drawText(label, W / 2, y + 12 + (pr ? 1 : 0), { size: 9, color: '#ffffff', outline: BTN_C[col][0], align: 0.5 });
   };
+  const SB = (id, y, label, fn) => { const x = 66, w = W - 132, h = 18, pr = hit(id, x, y, w, h, () => { sfx('select'); fn(); }); drawBtn(x, y, w, h, 'blue', pr); drawText(label, W / 2, y + 8 + (pr ? 1 : 0), { size: 7, color: '#ffffff', outline: BTN_C.blue[0], align: 0.5 }); };
   if (TITLE.hasSave) {
-    B('title_main', 196, '继续游戏', 'green', () => startGame(false));
-    B('title_new', 230, '新的开始', 'yellow', () => { if (TITLE.confirmNew) startGame(true); else { TITLE.confirmNew = true; } });
-    if (TITLE.confirmNew) drawText('再按一次将清除旧存档', W / 2, 264, { size: 6.5, color: '#f6757a', outline: PAL.K, align: 0.5 });
-  } else B('title_main', 210, '开始游戏', 'green', () => startGame(true));
+    B('title_main', 180, '继续游戏', 'green', () => startGame(false));
+    B('title_new', 211, TITLE.confirmNew ? '再按一次清除存档' : '新的开始', TITLE.confirmNew ? 'red' : 'yellow', () => { if (TITLE.confirmNew) startGame(true); else { TITLE.confirmNew = true; } });
+    SB('title_import', 243, '导入存档', () => saveTransfer('import'));
+  } else { B('title_main', 204, '开始游戏', 'green', () => startGame(true)); SB('title_import', 238, '导入存档', () => saveTransfer('import')); }
   drawText('方向键选择 · 黄色键确认 · 自动存档', W / 2, DECK_Y - 10, { size: 6, color: '#c0cbdc', outline: PAL.K, align: 0.5 });
-  drawText('v2.0 测试版', W - 6, DECK_Y - 10, { size: 5, color: '#8b9bb4', align: 1 });
+  drawText('v2.1 测试版', W - 6, DECK_Y - 10, { size: 5, color: '#8b9bb4', align: 1 });
+}
+// ---------------- 存档导出 / 导入（换设备、从浏览器搬到桌面图标） ----------------
+function exportCode() {
+  if (S && !UI.title) saveGame();
+  const raw = Store.get(SAVE_KEY); if (!raw) return '';
+  return 'PFS1:' + btoa(unescape(encodeURIComponent(raw)));
+}
+function decodeCode(code) {
+  code = (code || '').replace(/\s+/g, '');
+  const i = code.indexOf('PFS1:'); if (i < 0) return null;
+  try { const d = JSON.parse(decodeURIComponent(escape(atob(code.slice(i + 5))))); return d && d.ground && d.coins !== undefined ? d : null; } catch (_) { return null; }
+}
+function saveTransfer(mode) {
+  if (document.getElementById('pfs')) return;
+  const ov = document.createElement('div'); ov.id = 'pfs';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(14,12,26,.82);display:flex;align-items:center;justify-content:center;font:15px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:min(88vw,360px);background:#f4e6c4;border:3px solid #3e2731;border-radius:6px;padding:14px;color:#3e2731;box-shadow:0 8px 30px rgba(0,0,0,.5)';
+  const exp = mode === 'export', code = exp ? exportCode() : '';
+  box.innerHTML = `<div style="font-weight:bold;font-size:17px;margin-bottom:6px">${exp ? '导出存档' : '导入存档'}</div>
+    <div style="font-size:13px;color:#733e39;margin-bottom:8px">${exp ? '点“复制”，把这串文字粘贴到备忘录保存。到桌面图标版（或另一台手机）的“导入存档”里粘贴，就能恢复进度。' : '把之前导出的存档文字粘贴到下面，点“导入”。当前设备上的进度会被替换。'}</div>
+    <textarea id="pfs_t" style="width:100%;box-sizing:border-box;height:120px;font:11px monospace;border:2px solid #8a5a3b;border-radius:4px;padding:6px;background:#fff6d3;color:#3e2731;-webkit-user-select:text;user-select:text;touch-action:auto" ${exp ? 'readonly' : 'placeholder="在这里长按 → 粘贴"'}></textarea>
+    <div id="pfs_msg" style="font-size:13px;min-height:18px;margin:6px 0;color:#3e8948"></div>
+    <div style="display:flex;gap:8px">
+      <button id="pfs_ok" style="flex:1;padding:10px;font-size:15px;border:2px solid #265c42;background:#63c74d;color:#fff;border-radius:5px;font-weight:bold">${exp ? '复制' : '导入'}</button>
+      <button id="pfs_x" style="flex:1;padding:10px;font-size:15px;border:2px solid #5e1a24;background:#e43b44;color:#fff;border-radius:5px;font-weight:bold">关闭</button>
+    </div>`;
+  ov.appendChild(box); document.body.appendChild(ov);
+  const ta = document.getElementById('pfs_t'), msg = document.getElementById('pfs_msg');
+  const close = () => { ov.remove(); };
+  if (exp) { ta.value = code || ''; if (!code) { msg.style.color = '#a22633'; msg.textContent = '还没有存档'; } }
+  document.getElementById('pfs_x').onclick = close;
+  document.getElementById('pfs_ok').onclick = async () => {
+    if (exp) {
+      let ok = false;
+      try { await navigator.clipboard.writeText(code); ok = true; } catch (_) { }
+      if (!ok) { try { ta.removeAttribute('readonly'); ta.focus(); ta.select(); ta.setSelectionRange(0, code.length); ok = document.execCommand('copy'); ta.setAttribute('readonly', ''); } catch (_) { } }
+      msg.style.color = ok ? '#3e8948' : '#a22633';
+      msg.textContent = ok ? '已复制！去备忘录里粘贴保存吧' : '复制失败，请长按上面的文字手动全选复制';
+      return;
+    }
+    const d = decodeCode(ta.value);
+    if (!d) { msg.style.color = '#a22633'; msg.textContent = '存档文字不完整或不正确，请重新粘贴'; return; }
+    Store.set(SAVE_KEY, JSON.stringify(d));
+    msg.style.color = '#3e8948'; msg.textContent = '导入成功！正在重新载入…';
+    setTimeout(() => location.reload(), 600);
+  };
 }
 function startGame(fresh) {
   Audio_.unlock();
